@@ -200,3 +200,138 @@ func (t *Trie) Put(key []byte, value []byte) {
 	}
 
 }
+
+func (t *Trie) PutWithError(key []byte, value []byte) error {
+	// need to use pointer, so that I can update root in place without
+	// keeping trace of the parent node
+	node := &t.root
+	nibbles := FromBytes(key)
+	for {
+		if IsEmptyNode(*node) {
+			leaf := NewLeafNodeFromNibbles(nibbles, value)
+			*node = leaf
+			return nil
+		}
+
+		if leaf, ok := (*node).(*LeafNode); ok {
+			matched := PrefixMatchedLen(leaf.Path, nibbles)
+
+			// if all matched, update value even if the value are equal
+			if matched == len(nibbles) && matched == len(leaf.Path) {
+				newLeaf := NewLeafNodeFromNibbles(leaf.Path, value)
+				*node = newLeaf
+				return nil
+			}
+
+			branch := NewBranchNode()
+			// if matched some nibbles, check if matches either all remaining nibbles
+			// or all leaf nibbles
+			if matched == len(leaf.Path) {
+				branch.SetValue(leaf.Value)
+			}
+
+			if matched == len(nibbles) {
+				branch.SetValue(value)
+			}
+
+			// if there is matched nibbles, an extension node will be created
+			if matched > 0 {
+				// create an extension node for the shared nibbles
+				ext := NewExtensionNode(leaf.Path[:matched], branch)
+				*node = ext
+			} else {
+				// when there no matched nibble, there is no need to keep the extension node
+				*node = branch
+			}
+
+			if matched < len(leaf.Path) {
+				// have dismatched
+				// L 01020304 hello
+				// + 010203   world
+
+				// 01020304, 0, 4
+				branchNibble, leafNibbles := leaf.Path[matched], leaf.Path[matched+1:]
+				newLeaf := NewLeafNodeFromNibbles(leafNibbles, leaf.Value) // not :matched+1
+				branch.SetBranch(branchNibble, newLeaf)
+			}
+
+			if matched < len(nibbles) {
+				// L 01020304 hello
+				// + 010203040 world
+
+				// L 01020304 hello
+				// + 010203040506 world
+				branchNibble, leafNibbles := nibbles[matched], nibbles[matched+1:]
+				newLeaf := NewLeafNodeFromNibbles(leafNibbles, value)
+				branch.SetBranch(branchNibble, newLeaf)
+			}
+
+			return nil
+		}
+
+		if branch, ok := (*node).(*BranchNode); ok {
+			if len(nibbles) == 0 {
+				branch.SetValue(value)
+				return nil
+			}
+
+			b, remaining := nibbles[0], nibbles[1:]
+			nibbles = remaining
+			node = &branch.Branches[b]
+			continue
+		}
+
+		// E 01020304
+		// B 0 hello
+		// L 506 world
+		// + 010203 good
+		if ext, ok := (*node).(*ExtensionNode); ok {
+			matched := PrefixMatchedLen(ext.Path, nibbles)
+			if matched < len(ext.Path) {
+				// E 01020304
+				// + 010203 good
+				extNibbles, branchNibble, extRemainingnibbles := ext.Path[:matched], ext.Path[matched], ext.Path[matched+1:]
+				branch := NewBranchNode()
+				if len(extRemainingnibbles) == 0 {
+					// E 0102030
+					// + 010203 good
+					branch.SetBranch(branchNibble, ext.Next)
+				} else {
+					// E 01020304
+					// + 010203 good
+					newExt := NewExtensionNode(extRemainingnibbles, ext.Next)
+					branch.SetBranch(branchNibble, newExt)
+				}
+
+				if matched < len(nibbles) {
+					nodeBranchNibble, nodeLeafNibbles := nibbles[matched], nibbles[matched+1:]
+					remainingLeaf := NewLeafNodeFromNibbles(nodeLeafNibbles, value)
+					branch.SetBranch(nodeBranchNibble, remainingLeaf)
+				} else if matched == len(nibbles) {
+					branch.SetValue(value)
+				} else {
+					return fmt.Errorf(fmt.Sprintf("too many matched (%v > %v)", matched, len(nibbles)))
+				}
+
+				// if there is no shared extension nibbles any more, then we don't need the extension node
+				// any more
+				// E 01020304
+				// + 1234 good
+				if len(extNibbles) == 0 {
+					*node = branch
+				} else {
+					// otherwise create a new extension node
+					*node = NewExtensionNode(extNibbles, branch)
+				}
+				return nil
+			}
+
+			nibbles = nibbles[matched:]
+			node = &ext.Next
+			continue
+		}
+
+		return fmt.Errorf("unknown error")
+	}
+
+}

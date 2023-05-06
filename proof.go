@@ -115,7 +115,7 @@ func (t *Trie) Prove(key []byte) (Proof, bool) {
 			continue
 		}
 
-		panic("not found")
+		return nil, false
 	}
 }
 

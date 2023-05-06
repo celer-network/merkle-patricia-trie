@@ -21,7 +21,7 @@ import (
 )
 
 func TestBlockRoot(t *testing.T) {
-	ec, err := ethclient.Dial("")
+	ec, err := ethclient.Dial("https://mainnet.infura.io/v3/8156e0d12ad34f70ace18d20a4b4970b")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -33,7 +33,7 @@ func TestBlockRoot(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	proof, found := Bk2Prove(bk)
+	proof, found := GetTransactionProof(bk)
 	require.Equal(t, true, found)
 	log.Printf("proof %v \n", proof)
 
