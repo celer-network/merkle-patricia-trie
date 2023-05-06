@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,6 +20,73 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/require"
 )
+
+// encodeBufferPool holds temporary encoder buffers for DeriveSha and TX encoding.
+var encodeBufferPool = sync.Pool{
+	New: func() interface{} { return new(bytes.Buffer) },
+}
+
+func encodeForDerive(list types.Transactions, i int, buf *bytes.Buffer) []byte {
+	buf.Reset()
+	list.EncodeIndex(i, buf)
+	// It's really unfortunate that we need to do perform this copy.
+	// StackTrie holds onto the values until Hash is called, so the values
+	// written to it must not alias.
+	return common.CopyBytes(buf.Bytes())
+}
+
+func TestBlockRoot(t *testing.T) {
+	ec, err := ethclient.Dial("")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	//bk, err := ec.BlockByNumber(context.Background(), new(big.Int).SetUint64(17066168))
+	bk, err := ec.BlockByNumber(context.Background(), new(big.Int).SetUint64(17086605)) // 137 transactions, with ext nodes
+	//bk, err := ec.BlockByNumber(context.Background(), new(big.Int).SetUint64(14194126)) // sunyi
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	trie := NewTrie()
+
+	log.Printf("txlen: %d\n", len(bk.Transactions()))
+
+	valueBuf := encodeBufferPool.Get().(*bytes.Buffer)
+	defer encodeBufferPool.Put(valueBuf)
+	var indexBuf []byte
+	list := bk.Transactions()
+
+	for i := 1; i < list.Len() && i <= 0x7f; i++ {
+		indexBuf = rlp.AppendUint64(indexBuf[:0], uint64(i))
+		value := encodeForDerive(list, i, valueBuf)
+		trie.Put(indexBuf, value)
+	}
+
+	if list.Len() > 0 {
+		indexBuf = rlp.AppendUint64(indexBuf[:0], 0)
+		value := encodeForDerive(list, 0, valueBuf)
+		trie.Put(indexBuf, value)
+	}
+
+	for i := 0x80; i < list.Len(); i++ {
+		indexBuf = rlp.AppendUint64(indexBuf[:0], uint64(i))
+		value := encodeForDerive(list, i, valueBuf)
+		log.Printf("ids:%x, txhash: %x %d \n", indexBuf, list[i].Hash(), i)
+		trie.Put(indexBuf, value)
+	}
+
+	proof, found := trie.Prove(rlp.AppendUint64(indexBuf[:0], uint64(133)))
+	require.Equal(t, true, found)
+	log.Printf("proof %v \n", proof)
+
+	log.Printf("bk root hash %x \n", bk.TxHash())
+	log.Printf("tx root hash %x \n", trie.Hash())
+
+	_, err = VerifyProof(bk.TxHash().Bytes(), rlp.AppendUint64(indexBuf[:0], uint64(133)), proof)
+	require.NoError(t, err)
+
+}
 
 func TestTransactionRootAndProof(t *testing.T) {
 
@@ -142,58 +213,6 @@ func FromEthTransaction(t *types.Transaction) *Transaction {
 	}
 }
 
-func TestTrieWithOneTx(t *testing.T) {
-	key, err := rlp.EncodeToBytes(uint(0))
-	require.NoError(t, err)
-
-	tx := TransactionJSON(t)
-
-	transaction := FromEthTransaction(tx)
-	rlp, err := transaction.GetRLP()
-	require.NoError(t, err)
-
-	trie := NewTrie()
-	trie.Put(key, rlp)
-
-	txRootHash := fmt.Sprintf("%x", types.DeriveSha(types.Transactions{tx}))
-	require.Equal(t, txRootHash, fmt.Sprintf("%x", trie.Hash()))
-}
-
-func TestTrieWithTwoTxs(t *testing.T) {
-
-	txs := TransactionsJSON(t)
-	txs = txs[:2]
-
-	fmt.Printf("tx0: %x\n", types.Transactions(txs).GetRlp(0))
-	fmt.Printf("tx1: %x\n", types.Transactions(txs).GetRlp(1))
-	trie := NewTrie()
-	for i, tx := range txs {
-		key, err := rlp.EncodeToBytes(uint(i))
-		require.NoError(t, err)
-
-		fmt.Printf("key %v: %x\n", i, key)
-		transaction := FromEthTransaction(tx)
-
-		rlp, err := transaction.GetRLP()
-		require.NoError(t, err)
-
-		trie.Put(key, rlp)
-	}
-
-	key, err := rlp.EncodeToBytes(uint(0))
-	require.NoError(t, err)
-	value, found := trie.Get(key)
-	fmt.Printf("==0 value: %x, found: %v\n", value, found)
-
-	key, err = rlp.EncodeToBytes(uint(1))
-	require.NoError(t, err)
-	value, found = trie.Get(key)
-	fmt.Printf("==1 value: %x, found: %v\n", value, found)
-
-	txRootHash := fmt.Sprintf("%x", types.DeriveSha(types.Transactions(txs)))
-	require.Equal(t, txRootHash, fmt.Sprintf("%x", trie.Hash()))
-}
-
 func TestTrieWithHash(t *testing.T) {
 	trie := NewTrie()
 	key0, err := rlp.EncodeToBytes(uint(0))
@@ -207,27 +226,6 @@ func TestTrieWithHash(t *testing.T) {
 	trie.Put(key0, tx0)
 	trie.Put(key1, tx1)
 	require.Equal(t, "88796e4f9cfeca7b53f666e3103a1ba981b9445b78bf687788e1ad8976843d83", fmt.Sprintf("%x", trie.Hash()))
-}
-
-func TestTrieWithBlockTxs(t *testing.T) {
-	txs := TransactionsJSON(t)
-
-	trie := NewTrie()
-	for i, tx := range txs {
-		key, err := rlp.EncodeToBytes(uint(i))
-		require.NoError(t, err)
-
-		transaction := FromEthTransaction(tx)
-
-		rlp, err := transaction.GetRLP()
-		require.NoError(t, err)
-
-		trie.Put(key, rlp)
-	}
-
-	txRootHash := fmt.Sprintf("%x", types.DeriveSha(types.Transactions(txs)))
-	fmt.Printf("txRootHash: %v\n", txRootHash)
-	require.Equal(t, txRootHash, fmt.Sprintf("%x", trie.Hash()))
 }
 
 func Test130Items(t *testing.T) {
