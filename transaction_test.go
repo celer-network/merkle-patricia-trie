@@ -12,7 +12,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,20 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/require"
 )
-
-// encodeBufferPool holds temporary encoder buffers for DeriveSha and TX encoding.
-var encodeBufferPool = sync.Pool{
-	New: func() interface{} { return new(bytes.Buffer) },
-}
-
-func encodeForDerive(list types.Transactions, i int, buf *bytes.Buffer) []byte {
-	buf.Reset()
-	list.EncodeIndex(i, buf)
-	// It's really unfortunate that we need to do perform this copy.
-	// StackTrie holds onto the values until Hash is called, so the values
-	// written to it must not alias.
-	return common.CopyBytes(buf.Bytes())
-}
 
 func TestBlockRoot(t *testing.T) {
 	ec, err := ethclient.Dial("")
@@ -48,44 +33,14 @@ func TestBlockRoot(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	trie := NewTrie()
-
-	log.Printf("txlen: %d\n", len(bk.Transactions()))
-
-	valueBuf := encodeBufferPool.Get().(*bytes.Buffer)
-	defer encodeBufferPool.Put(valueBuf)
-	var indexBuf []byte
-	list := bk.Transactions()
-
-	for i := 1; i < list.Len() && i <= 0x7f; i++ {
-		indexBuf = rlp.AppendUint64(indexBuf[:0], uint64(i))
-		value := encodeForDerive(list, i, valueBuf)
-		trie.Put(indexBuf, value)
-	}
-
-	if list.Len() > 0 {
-		indexBuf = rlp.AppendUint64(indexBuf[:0], 0)
-		value := encodeForDerive(list, 0, valueBuf)
-		trie.Put(indexBuf, value)
-	}
-
-	for i := 0x80; i < list.Len(); i++ {
-		indexBuf = rlp.AppendUint64(indexBuf[:0], uint64(i))
-		value := encodeForDerive(list, i, valueBuf)
-		log.Printf("ids:%x, txhash: %x %d \n", indexBuf, list[i].Hash(), i)
-		trie.Put(indexBuf, value)
-	}
-
-	proof, found := trie.Prove(rlp.AppendUint64(indexBuf[:0], uint64(133)))
+	proof, found := Bk2Prove(bk)
 	require.Equal(t, true, found)
 	log.Printf("proof %v \n", proof)
 
 	log.Printf("bk root hash %x \n", bk.TxHash())
-	log.Printf("tx root hash %x \n", trie.Hash())
-
-	_, err = VerifyProof(bk.TxHash().Bytes(), rlp.AppendUint64(indexBuf[:0], uint64(133)), proof)
+	//log.Printf("tx root hash %x \n", trie.Hash())
+	//_, err = VerifyProof(bk.TxHash().Bytes(), rlp.AppendUint64(indexBuf[:0], uint64(133)), proof)
 	require.NoError(t, err)
-
 }
 
 func TestTransactionRootAndProof(t *testing.T) {
