@@ -1,4 +1,4 @@
-module merkle-patrica-trie
+module github.com/celer-network/merkle-patricia-trie
 
 go 1.18
 
