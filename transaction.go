@@ -41,7 +41,7 @@ func EncodeForDerive(list types.Transactions, i int, buf *bytes.Buffer) []byte {
 	return common.CopyBytes(buf.Bytes())
 }
 
-func GetTransactionProof(bk *types.Block, index int) (Proof, bool) {
+func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, bool) {
 	trie := NewTrie()
 	valueBuf := EncodeBufferPool.Get().(*bytes.Buffer)
 	defer EncodeBufferPool.Put(valueBuf)
@@ -53,7 +53,7 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, bool) {
 		value := EncodeForDerive(list, i, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, false
+			return nil, nil, false
 		}
 	}
 
@@ -62,7 +62,7 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, bool) {
 		value := EncodeForDerive(list, 0, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, false
+			return nil, nil, false
 		}
 	}
 
@@ -71,10 +71,10 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, bool) {
 		value := EncodeForDerive(list, i, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, false
+			return nil, nil, false
 		}
 	}
 	proof, found := trie.Prove(rlp.AppendUint64(indexBuf[:0], uint64(index)))
 
-	return proof, found
+	return proof, rlp.AppendUint64(indexBuf[:0], uint64(index)), found
 }
