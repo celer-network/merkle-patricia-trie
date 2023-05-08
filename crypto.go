@@ -1,4 +1,4 @@
-package main
+package tranx
 
 import "golang.org/x/crypto/sha3"
 

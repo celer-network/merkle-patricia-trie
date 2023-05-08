@@ -1,4 +1,4 @@
-package main
+package tranx
 
 import "github.com/ethereum/go-ethereum/rlp"
 
