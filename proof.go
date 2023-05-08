@@ -25,7 +25,8 @@ type Proof interface {
 }
 
 type ProofDB struct {
-	kv map[string][]byte
+	kv       map[string][]byte
+	leafnode string
 }
 
 func NewProofDB() *ProofDB {
@@ -70,7 +71,7 @@ func (w *ProofDB) Serialize() [][]byte {
 }
 
 // Prove returns the merkle proof for the given key, which is
-func (t *Trie) Prove(key []byte) (Proof, bool) {
+func (t *Trie) Prove(key []byte) (Proof, string, bool) {
 	proof := NewProofDB()
 	node := t.root
 	nibbles := FromBytes(key)
@@ -79,21 +80,23 @@ func (t *Trie) Prove(key []byte) (Proof, bool) {
 		proof.Put(Hash(node), Serialize(node))
 
 		if IsEmptyNode(node) {
-			return nil, false
+			return nil, "", false
 		}
 
 		if leaf, ok := node.(*LeafNode); ok {
 			matched := PrefixMatchedLen(leaf.Path, nibbles)
 			if matched != len(leaf.Path) || matched != len(nibbles) {
-				return nil, false
+				return nil, "", false
 			}
 
-			return proof, true
+			proof.leafnode = fmt.Sprintf("leaf value: %x", Serialize(node))
+
+			return proof, proof.leafnode, true
 		}
 
 		if branch, ok := node.(*BranchNode); ok {
 			if len(nibbles) == 0 {
-				return proof, branch.HasValue()
+				return proof, proof.leafnode, branch.HasValue()
 			}
 
 			b, remaining := nibbles[0], nibbles[1:]
@@ -107,7 +110,7 @@ func (t *Trie) Prove(key []byte) (Proof, bool) {
 			// E 01020304
 			//   010203
 			if matched < len(ext.Path) {
-				return nil, false
+				return nil, "", false
 			}
 
 			nibbles = nibbles[matched:]
@@ -115,7 +118,7 @@ func (t *Trie) Prove(key []byte) (Proof, bool) {
 			continue
 		}
 
-		return nil, false
+		return nil, "", false
 	}
 }
 

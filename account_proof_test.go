@@ -53,7 +53,7 @@ func TestStorageProof(t *testing.T) {
 	stateRoot := worldStateTrie.Hash()
 
 	// create proof for account1's state
-	accountState1Proof, ok := worldStateTrie.Prove(account1Hash)
+	accountState1Proof, _, ok := worldStateTrie.Prove(account1Hash)
 	require.True(t, ok)
 
 	serialized := accountState1Proof.Serialize()

@@ -33,7 +33,8 @@ func TestBlockRoot(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	proof, found := GetTransactionProof(bk)
+	proof, _, leafnode, found := GetTransactionProof(bk, 133)
+	fmt.Println(leafnode)
 	require.Equal(t, true, found)
 	log.Printf("proof %v \n", proof)
 
@@ -77,7 +78,7 @@ func TestTransactionRootAndProof(t *testing.T) {
 		key, err := rlp.EncodeToBytes(uint(30))
 		require.NoError(t, err)
 
-		proof, found := trie.Prove(key)
+		proof, _, found := trie.Prove(key)
 		require.Equal(t, true, found)
 
 		txRLP, err := VerifyProof(transactionRoot, key, proof)

@@ -40,7 +40,7 @@ func TestProveAndVerifyProof(t *testing.T) {
 		tr.Put([]byte{1, 2, 3}, []byte("hello"))
 		tr.Put([]byte{1, 2, 3, 4, 5}, []byte("world"))
 		notExistKey := []byte{1, 2, 3, 4}
-		_, ok := tr.Prove(notExistKey)
+		_, _, ok := tr.Prove(notExistKey)
 		require.False(t, ok)
 	})
 
@@ -50,7 +50,7 @@ func TestProveAndVerifyProof(t *testing.T) {
 		tr.Put([]byte{1, 2, 3, 4, 5}, []byte("world"))
 
 		key := []byte{1, 2, 3}
-		proof, ok := tr.Prove(key)
+		proof, _, ok := tr.Prove(key)
 		require.True(t, ok)
 
 		rootHash := tr.Hash()
@@ -74,7 +74,7 @@ func TestProveAndVerifyProof(t *testing.T) {
 		// the proof was generated after the trie was updated
 		tr.Put([]byte{5, 6, 7}, []byte("trie"))
 		key := []byte{1, 2, 3}
-		proof, ok := tr.Prove(key)
+		proof, _, ok := tr.Prove(key)
 		require.True(t, ok)
 
 		// should fail the verification since the merkle root hash doesn't match

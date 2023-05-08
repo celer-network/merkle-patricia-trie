@@ -2,6 +2,7 @@ package tranx
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -41,7 +42,7 @@ func EncodeForDerive(list types.Transactions, i int, buf *bytes.Buffer) []byte {
 	return common.CopyBytes(buf.Bytes())
 }
 
-func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, bool) {
+func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, string, bool) {
 	trie := NewTrie()
 	valueBuf := EncodeBufferPool.Get().(*bytes.Buffer)
 	defer EncodeBufferPool.Put(valueBuf)
@@ -53,7 +54,7 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, bool) {
 		value := EncodeForDerive(list, i, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, nil, false
+			return nil, nil, "", false
 		}
 	}
 
@@ -62,7 +63,7 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, bool) {
 		value := EncodeForDerive(list, 0, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, nil, false
+			return nil, nil, "", false
 		}
 	}
 
@@ -71,10 +72,10 @@ func GetTransactionProof(bk *types.Block, index int) (Proof, []byte, bool) {
 		value := EncodeForDerive(list, i, valueBuf)
 		err := trie.PutWithError(indexBuf, value)
 		if err != nil {
-			return nil, nil, false
+			return nil, nil, "", false
 		}
 	}
-	proof, found := trie.Prove(rlp.AppendUint64(indexBuf[:0], uint64(index)))
-
-	return proof, rlp.AppendUint64(indexBuf[:0], uint64(index)), found
+	proof, leafnode, found := trie.Prove(rlp.AppendUint64(indexBuf[:0], uint64(index)))
+	fmt.Println(leafnode)
+	return proof, rlp.AppendUint64(indexBuf[:0], uint64(index)), leafnode, found
 }
