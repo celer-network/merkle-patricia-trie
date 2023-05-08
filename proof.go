@@ -89,7 +89,7 @@ func (t *Trie) Prove(key []byte) (Proof, string, bool) {
 				return nil, "", false
 			}
 
-			proof.leafnode = fmt.Sprintf("leaf value: %x", Serialize(node))
+			proof.leafnode = fmt.Sprintf("%x", Serialize(node))
 
 			return proof, proof.leafnode, true
 		}

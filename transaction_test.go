@@ -33,8 +33,8 @@ func TestBlockRoot(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	proof, _, leafnode, found := GetTransactionProof(bk, 133)
-	fmt.Println(leafnode)
+	proof, _, _, found := GetTransactionProof(bk, 133)
+
 	require.Equal(t, true, found)
 	log.Printf("proof %v \n", proof)
 
