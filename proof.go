@@ -22,11 +22,18 @@ type Proof interface {
 
 	// Serialize returns the serialized proof
 	Serialize() [][]byte
+
+	SerializeList() [][]byte
 }
 
 type ProofDB struct {
 	kv       map[string][]byte
+	nodeList [][]byte
 	leafnode string
+}
+
+func (w *ProofDB) SerializeList() [][]byte {
+	return w.nodeList
 }
 
 func NewProofDB() *ProofDB {
@@ -38,6 +45,7 @@ func NewProofDB() *ProofDB {
 func (w *ProofDB) Put(key []byte, value []byte) error {
 	keyS := fmt.Sprintf("%x", key)
 	w.kv[keyS] = value
+	w.nodeList = append(w.nodeList, value)
 	fmt.Printf("put key: %x, value: %x\n", key, value)
 	return nil
 }

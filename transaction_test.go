@@ -35,6 +35,10 @@ func TestBlockRoot(t *testing.T) {
 
 	proof, _, _, found := GetTransactionProof(bk, 133)
 
+	for _, x := range proof.SerializeList() {
+		log.Printf("proof: %x", x)
+	}
+
 	require.Equal(t, true, found)
 	log.Printf("proof %v \n", proof)
 
